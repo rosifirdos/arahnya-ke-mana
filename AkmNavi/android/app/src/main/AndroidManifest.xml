@@ -4,9 +4,14 @@
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Android 12+ -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <!-- Foreground service untuk menjaga listener tetap aktif -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
@@ -27,14 +32,17 @@
         </intent-filter>
       </activity>
       
-      <!-- Notification Listener Service -->
-      <service android:name="com.reactnativenotificationlistener.RNNotificationListenerService"
-               android:label="RNNotificationListenerService"
+      <!-- Notification Listener Service (package harus sesuai library) -->
+      <service android:name="com.lesimoes.androidnotificationlistener.RNAndroidNotificationListenerHeadlessJsTaskService"
+               android:exported="false" />
+
+      <service android:name="com.lesimoes.androidnotificationlistener.RNNotificationListenerService"
+               android:label="AkmNavi Notification Listener"
                android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
                android:exported="true">
-          <intent-filter>
-              <action android:name="android.service.notification.NotificationListenerService" />
-          </intent-filter>
+        <intent-filter>
+            <action android:name="android.service.notification.NotificationListenerService" />
+        </intent-filter>
       </service>
 
     </application>
