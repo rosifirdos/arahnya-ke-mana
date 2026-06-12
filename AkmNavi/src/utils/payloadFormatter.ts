@@ -4,39 +4,41 @@
  * Format Output: "ARAH|JARAK" (Contoh: "KIRI|200m")
  */
 
-export const formatPayload = (title: string, text: string): string | null => {
-  if (!title && !text) return null;
-
-  const content = `${title} ${text}`.toLowerCase();
+export const formatPayload = (title: string, text: string, subText: string, titleBig: string): string | null => {
+  const content = `${title} ${text} ${subText} ${titleBig}`.toLowerCase();
   
+  if (!content.trim()) return null;
+
   let direction = '';
   
-  // Deteksi arah berdasarkan kata kunci Bahasa Indonesia
-  if (content.includes('putar balik')) {
+  // Deteksi arah
+  if (content.includes('putar balik') || content.includes('u-turn')) {
     direction = 'BALIK';
-  } else if (content.includes('kiri')) {
+  } else if (content.includes('kiri') || content.includes('left')) {
     direction = 'KIRI';
-  } else if (content.includes('kanan')) {
+  } else if (content.includes('kanan') || content.includes('right')) {
     direction = 'KANAN';
-  } else if (content.includes('terus') || content.includes('lurus')) {
+  } else if (content.includes('terus') || content.includes('lurus') || content.includes('straight')) {
     direction = 'LURUS';
+  } else if (content.includes('belok')) {
+    // Jika ada kata belok tapi tidak jelas kiri/kanan
+    direction = 'BELOK';
   } else {
-    // Jika tidak ada arah yang jelas, jangan kirim payload
-    return null;
+    // Jika tidak ada kata arah, kita biarkan kosong agar ESP32 hanya menampilkan jarak
+    direction = ' ';
   }
 
-  // Ekstrak jarak (mencari angka diikuti 'm' atau 'km')
-  // Contoh: "200 m", "2,5 km", "1.5km"
-  const distanceMatch = content.match(/(\d+[.,]?\d*)\s*(km|m)/);
-  let distance = '';
+  // Ekstrak jarak
+  const distanceMatch = content.match(/(\d+[.,]?\d*)\s*(km|m|ft|mi)/);
+  let distance = '-';
   
   if (distanceMatch) {
-    // distanceMatch[1] = angka (misal "200")
-    // distanceMatch[2] = satuan (misal "m")
     distance = `${distanceMatch[1]}${distanceMatch[2]}`;
-  } else {
-    // Jika tidak ada jarak, set default kosong atau '-'
-    distance = '-';
+  }
+
+  // Jika tidak ada jarak dan arah tidak jelas, jangan kirim update kosong
+  if (direction === ' ' && distance === '-') {
+    return null;
   }
 
   return `${direction}|${distance}`;

@@ -12,18 +12,48 @@ try {
       try {
         if (!notification) return;
 
-        const app = notification.app || notification.packageName || '';
+        // Notifikasi dari library ini berupa JSON string
+        let notifObj;
+        try {
+          notifObj = typeof notification === 'string' ? JSON.parse(notification) : notification;
+        } catch (e) {
+          console.warn('Gagal parse notifikasi', e);
+          return;
+        }
+
+        const app = notifObj.app || notifObj.packageName || '';
         if (app !== 'com.google.android.apps.maps') return;
 
-        const title = notification.title || '';
-        const text = notification.text || '';
-        const payload = formatPayload(title, text);
+        const title = notifObj.title || '';
+        const text = notifObj.text || '';
+        const subText = notifObj.subText || '';
+        const titleBig = notifObj.titleBig || '';
+        
+        const fullContent = `${title} | ${text} | ${subText} | ${titleBig}`;
+        
+        // Simpan log terakhir ke AsyncStorage agar bisa dilihat di layar UI
+        try {
+          const { AsyncStorage } = require('react-native');
+          // react-native-async-storage is what we use, so require it properly
+          const AsyncStorageModule = require('@react-native-async-storage/async-storage').default;
+          await AsyncStorageModule.setItem('@last_notif', JSON.stringify(notifObj));
+        } catch (e) {}
 
+        const { ToastAndroid } = require('react-native');
+        ToastAndroid.show(`MAPS: ${fullContent}`, ToastAndroid.LONG);
+
+        // Paksa kirim string bebas ke ESP32 untuk melihat apakah background fetch() jalan
+        let testPayload = 'B: ' + (title || text).substring(0, 10);
+        
+        // Coba kita format
+        const payload = formatPayload(title, text, subText, titleBig);
         if (payload) {
-          // Lazy-load BleService agar tidak crash jika BLE belum siap
-          const BleService = require('./src/services/BleService').default;
-          await BleService.sendCurrentPayload(payload);
+            testPayload = payload;
         }
+
+        // Lazy-load WifiService agar tidak crash jika WiFi belum siap
+        const WifiService = require('./src/services/WifiService').default;
+        await WifiService.sendCurrentPayload(testPayload);
       } catch (error) {
         console.error('Error handling notification:', error);
       }

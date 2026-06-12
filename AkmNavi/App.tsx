@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StyleSheet, PermissionsAndroid, Platform, Alert, View, Text, TouchableOpacity } from 'react-native';
+import { SafeAreaView, StyleSheet, Platform, Alert, View, Text, TouchableOpacity } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
-import ScanScreen from './src/screens/ScanScreen';
 import NotificationService from './src/services/NotificationService';
 
 const App = () => {
-  const [currentScreen, setCurrentScreen] = useState<'HOME' | 'SCAN'>('HOME');
   const [permissionsGranted, setPermissionsGranted] = useState(false);
 
   useEffect(() => {
@@ -15,41 +13,15 @@ const App = () => {
   const requestPermissions = async () => {
     try {
       if (Platform.OS === 'android') {
-        const permsToRequest: any[] = [
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        ];
-
-        // Izin Bluetooth Android 12+
-        if (Platform.Version >= 31) {
-          permsToRequest.push(
-            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          );
-        }
-
-        const granted = await PermissionsAndroid.requestMultiple(permsToRequest);
-
-        const allGranted = Object.values(granted).every(
-          (status) => status === PermissionsAndroid.RESULTS.GRANTED
-        );
-
-        if (!allGranted) {
-          Alert.alert(
-            'Izin Ditolak',
-            'Beberapa izin ditolak. Fitur Bluetooth mungkin tidak berfungsi optimal. Anda bisa mengaktifkannya di Pengaturan.',
-          );
-        }
-
-        // Selalu izinkan masuk ke app, meskipun izin ditolak
         setPermissionsGranted(true);
 
-        // Cek izin Notification Listener (terpisah, ini bukan runtime permission)
+        // Cek izin Notification Listener
         try {
           const hasNotifPermission = await NotificationService.checkPermission();
           if (!hasNotifPermission) {
             Alert.alert(
               'Akses Notifikasi Dibutuhkan',
-              'Mohon izinkan AkmNavi untuk membaca notifikasi Google Maps agar navigasi bisa ditampilkan di ESP32.',
+              'Mohon izinkan AkmNavi untuk membaca notifikasi Google Maps agar navigasi bisa dikirim ke ESP32.',
               [
                 { text: 'Nanti', style: 'cancel' },
                 { text: 'Buka Pengaturan', onPress: () => NotificationService.requestPermission() },
@@ -87,11 +59,7 @@ const App = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {currentScreen === 'HOME' ? (
-        <HomeScreen onOpenScan={() => setCurrentScreen('SCAN')} />
-      ) : (
-        <ScanScreen onClose={() => setCurrentScreen('HOME')} />
-      )}
+      <HomeScreen />
     </SafeAreaView>
   );
 };
