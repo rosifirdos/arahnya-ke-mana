@@ -24,12 +24,13 @@ export const formatPayload = (title: string, text: string, subText: string, titl
     // Jika ada kata belok tapi tidak jelas kiri/kanan
     direction = 'BELOK';
   } else {
-    // Jika tidak ada kata arah, kita biarkan kosong agar ESP32 hanya menampilkan jarak
-    direction = ' ';
+    // Default: asumsikan lurus/ikuti jalan jika arah kosong
+    direction = 'LURUS_DEFAULT';
   }
 
   // Ekstrak jarak
-  const distanceMatch = content.match(/(\d+[.,]?\d*)\s*(km|m|ft|mi)/);
+  // Gunakan \b (word boundary) agar "min" tidak terbaca sebagai "m"
+  const distanceMatch = content.match(/(\d+[.,]?\d*)\s*\b(km|m|ft|mi)\b/);
   let distance = '-';
   
   if (distanceMatch) {
@@ -37,8 +38,13 @@ export const formatPayload = (title: string, text: string, subText: string, titl
   }
 
   // Jika tidak ada jarak dan arah tidak jelas, jangan kirim update kosong
-  if (direction === ' ' && distance === '-') {
+  if (direction === 'LURUS_DEFAULT' && distance === '-') {
     return null;
+  }
+
+  // Ubah kembali menjadi LURUS agar LCD memunculkan panah lurus
+  if (direction === 'LURUS_DEFAULT') {
+    direction = 'LURUS';
   }
 
   return `${direction}|${distance}`;

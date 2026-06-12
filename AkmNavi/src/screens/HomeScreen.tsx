@@ -1,107 +1,126 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Keyboard, ScrollView } from 'react-native';
-import WifiService from '../services/WifiService';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import BleService from '../services/BleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { formatPayload } from '../utils/payloadFormatter';
 
 const HomeScreen: React.FC = () => {
-  const [isConnected, setIsConnected] = useState(WifiService.isDeviceConnected());
-  const [ipAddress, setIpAddress] = useState(WifiService.getIpAddress());
-  const [isEditing, setIsEditing] = useState(false);
+  const [isConnected, setIsConnected] = useState(BleService.isDeviceConnected());
+  const [statusMessage, setStatusMessage] = useState('Siap memindai...');
   const [debugLog, setDebugLog] = useState('');
-
-  const checkConnection = useCallback(async () => {
-    const status = await WifiService.checkConnection();
-    setIsConnected(status);
-  }, []);
+  const [payloadLog, setPayloadLog] = useState('Menunggu data...');
 
   useEffect(() => {
-    // Initial fetch of IP to sync state
-    setIpAddress(WifiService.getIpAddress());
-    checkConnection();
+    let lastProcessedLog = '';
 
-    WifiService.onConnectionStatusChange = (status) => {
+    BleService.onConnectionStatusChange = (status) => {
       setIsConnected(status);
+      if (status) {
+        setStatusMessage('Terhubung ke ESP32');
+        lastProcessedLog = ''; // Reset agar notifikasi terakhir langsung dikirim ulang saat reconnect
+      } else {
+        setStatusMessage('Koneksi terputus');
+      }
     };
 
     const interval = setInterval(() => {
-      checkConnection();
       AsyncStorage.getItem('@last_notif').then(log => {
-        if (log) setDebugLog(log);
+        if (log) {
+          setDebugLog(log);
+          
+          // Hanya kirim jika ada notifikasi baru
+          if (log !== lastProcessedLog && BleService.isDeviceConnected()) {
+            lastProcessedLog = log;
+            
+            try {
+              const notifObj = JSON.parse(log);
+              const title = notifObj.title || '';
+              const text = notifObj.text || '';
+              const subText = notifObj.subText || '';
+              const titleBig = notifObj.titleBig || '';
+              
+              const payload = formatPayload(title, text, subText, titleBig);
+              
+              if (payload) {
+                BleService.sendCurrentPayload(payload).then(res => {
+                  setPayloadLog(res);
+                });
+              } else {
+                setPayloadLog('NOT SENT: payload formatter returned null');
+              }
+            } catch (e: any) {
+              console.warn('Error parsing log in HomeScreen:', e);
+              setPayloadLog(`PARSE ERROR: ${e?.message}`);
+            }
+          }
+        }
       });
     }, 2000);
 
-    return () => clearInterval(interval);
-  }, [checkConnection]);
+    return () => {
+      clearInterval(interval);
+      BleService.disconnect();
+    };
+  }, []);
 
-  const handleSaveIp = async () => {
-    Keyboard.dismiss();
-    await WifiService.setIpAddress(ipAddress);
-    setIsEditing(false);
-  };
+  const handleScanAndConnect = useCallback(() => {
+    if (isConnected) {
+      BleService.disconnect();
+    } else {
+      BleService.scanAndConnect((msg) => {
+        setStatusMessage(msg);
+      });
+    }
+  }, [isConnected]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>AKM Navi (Hotspot Mode)</Text>
+      <Text style={styles.title}>AKM Navi (BLE Mode)</Text>
       
       <View style={styles.statusContainer}>
         <View style={[styles.indicator, { backgroundColor: isConnected ? '#4CAF50' : '#F44336' }]} />
         <Text style={styles.statusText}>
-          {isConnected ? 'Terhubung ke ESP32' : 'Tidak Terhubung'}
+          {isConnected ? 'Terhubung' : 'Tidak Terhubung'}
         </Text>
       </View>
 
       <View style={styles.ipContainer}>
-        <Text style={styles.ipLabel}>IP Address ESP32:</Text>
-        {isEditing ? (
-          <View style={styles.ipInputRow}>
-            <TextInput
-              style={styles.ipInput}
-              value={ipAddress}
-              onChangeText={setIpAddress}
-              keyboardType="numeric"
-              placeholder="192.168.43.51"
-            />
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveIp}>
-              <Text style={styles.saveButtonText}>Simpan</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.ipInputRow}>
-            <Text style={styles.ipValue}>{ipAddress}</Text>
-            <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
-              <Text style={styles.editButtonText}>Ubah</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <Text style={styles.ipLabel}>Status BLE:</Text>
+        <Text style={styles.ipValue}>{statusMessage}</Text>
       </View>
 
       {!isConnected && (
         <View style={styles.warningBox}>
           <Text style={styles.warningTitle}>Cara Menghubungkan:</Text>
           <Text style={styles.warningDesc}>
-            1. Nyalakan Hotspot HP Anda (Nama: AKM_Navi, Sandi: password123).{'\n'}
-            2. Nyalakan alat ESP32.{'\n'}
-            3. Tunggu hingga LCD ESP32 menampilkan angka IP (misal: 192.168.43.15).{'\n'}
-            4. Klik 'Ubah' di atas dan masukkan angka IP tersebut.{'\n'}
-            5. Klik 'Simpan' dan tunggu indikator menjadi Hijau.
+            1. Nyalakan Bluetooth di HP Anda.{'\n'}
+            2. Nyalakan perangkat ESP32 HUD.{'\n'}
+            3. Pastikan LCD menampilkan "Menunggu Koneksi BLE...".{'\n'}
+            4. Tekan tombol "Scan & Connect" di bawah ini.{'\n'}
+            5. Aplikasi akan otomatis mencari "AKM_Navi" dan menyambungkannya.
           </Text>
         </View>
       )}
 
-      <TouchableOpacity style={styles.button} onPress={checkConnection}>
-        <Text style={styles.buttonText}>Refresh Status</Text>
+      <TouchableOpacity 
+        style={[styles.button, isConnected ? styles.buttonDisconnect : null]} 
+        onPress={handleScanAndConnect}
+      >
+        <Text style={styles.buttonText}>{isConnected ? 'Putus Koneksi' : 'Scan & Connect'}</Text>
       </TouchableOpacity>
 
       <View style={styles.infoBox}>
         <Text style={styles.infoTitle}>Info Navigasi:</Text>
         <Text style={styles.infoDesc}>
-          1. Keuntungan mode ini: Anda BISA memakai koneksi data seluler untuk Google Maps.{'\n'}
-          2. Pastikan status berwarna Hijau.{'\n'}
-          3. Buka Google Maps dan mulai rute navigasi.
+          1. Mulai Rute Navigasi di Google Maps.{'\n'}
+          2. Anda bisa mematikan layar HP atau membuka aplikasi lain.{'\n'}
+          3. Notifikasi Maps akan otomatis ditangkap dan dikirim ke LCD ESP32.
         </Text>
       </View>
 
       <View style={styles.debugBox}>
+        <Text style={styles.debugTitle}>BLE TX Status:</Text>
+        <Text style={styles.debugDesc}>{payloadLog}</Text>
         <Text style={styles.debugTitle}>Debug Log (Last Notification):</Text>
         <Text style={styles.debugDesc}>{debugLog}</Text>
       </View>
@@ -155,46 +174,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 8,
   },
-  ipInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   ipValue: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#333',
     fontWeight: '500',
-  },
-  ipInput: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    fontSize: 16,
-    marginRight: 10,
-  },
-  editButton: {
-    backgroundColor: '#9E9E9E',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 5,
-  },
-  editButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 5,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
   },
   warningBox: {
     marginBottom: 20,
@@ -222,6 +205,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     width: '80%',
     alignItems: 'center',
+  },
+  buttonDisconnect: {
+    backgroundColor: '#F44336',
   },
   buttonText: {
     color: '#fff',

@@ -42,18 +42,8 @@ try {
         const { ToastAndroid } = require('react-native');
         ToastAndroid.show(`MAPS: ${fullContent}`, ToastAndroid.LONG);
 
-        // Paksa kirim string bebas ke ESP32 untuk melihat apakah background fetch() jalan
-        let testPayload = 'B: ' + (title || text).substring(0, 10);
-        
-        // Coba kita format
-        const payload = formatPayload(title, text, subText, titleBig);
-        if (payload) {
-            testPayload = payload;
-        }
-
-        // Lazy-load WifiService agar tidak crash jika WiFi belum siap
-        const WifiService = require('./src/services/WifiService').default;
-        await WifiService.sendCurrentPayload(testPayload);
+        // Hapus pemanggilan BleService dari Headless JS karena akan ditangani oleh HomeScreen.tsx (UI Thread)
+        // Ini mencegah masalah state antara background thread dan foreground thread
       } catch (error) {
         console.error('Error handling notification:', error);
       }

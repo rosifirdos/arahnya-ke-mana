@@ -1,15 +1,107 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
-#include <WiFi.h>
-#include <WebServer.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
-// Konfigurasi WiFi Hotspot HP
-const char* ssid = "AKM_Navi";
-const char* password = "password123";
-
-// LCD I2C setup
+// Konfigurasi LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-WebServer server(80);
+
+// UUID untuk Nordic UART Service
+#define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
+#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+
+BLEServer *pServer = NULL;
+bool deviceConnected = false;
+
+// Custom Characters (Panah)
+byte arrowLeft[8] = {
+  B00000,
+  B00100,
+  B01100,
+  B11111,
+  B01100,
+  B00100,
+  B00000,
+  B00000
+};
+
+byte arrowRight[8] = {
+  B00000,
+  B00100,
+  B00110,
+  B11111,
+  B00110,
+  B00100,
+  B00000,
+  B00000
+};
+
+byte arrowStraight[8] = {
+  B00100,
+  B01110,
+  B11111,
+  B00100,
+  B00100,
+  B00100,
+  B00100,
+  B00000
+};
+
+byte arrowUTurn[8] = {
+  B01110,
+  B10001,
+  B10001,
+  B10101,
+  B10111,
+  B10000,
+  B10000,
+  B00000
+};
+
+// Callback untuk koneksi BLE
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("Device connected!");
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Terhubung ke HP");
+      delay(2000);
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Siaga Navigasi");
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("Device disconnected!");
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Koneksi Terputus");
+      lcd.setCursor(0, 1);
+      lcd.print("Menunggu BLE...");
+      pServer->startAdvertising(); // Mulai advertising lagi
+    }
+};
+
+void updateLCD(String payload);
+
+// Callback untuk menerima data dari HP (RX)
+class MyCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      String rxValue = pCharacteristic->getValue().c_str();
+
+      if (rxValue.length() > 0) {
+        Serial.print("Received Value: ");
+        Serial.println(rxValue);
+        // Hapus trailing newline jika ada
+        rxValue.trim();
+        updateLCD(rxValue);
+      }
+    }
+};
 
 void setup() {
   Serial.begin(115200);
@@ -17,98 +109,61 @@ void setup() {
   // Inisialisasi LCD
   lcd.init();
   lcd.backlight();
+  
+  // Daftarkan Custom Character ke CGRAM LCD (Maksimal 8 karakter, ID 0-7)
+  lcd.createChar(0, arrowLeft);
+  lcd.createChar(1, arrowRight);
+  lcd.createChar(2, arrowStraight);
+  lcd.createChar(3, arrowUTurn);
+
   lcd.setCursor(0, 0);
-  lcd.print("Menghubungkan...");
-  lcd.setCursor(0, 1);
-  lcd.print("Ke Hotspot HP");
+  lcd.print("Menyiapkan BLE..");
 
-  // Mulai koneksi WiFi sebagai Client (Station)
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  // Inisialisasi BLE
+  BLEDevice::init("AKM_Navi");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
 
-  Serial.print("Connecting to WiFi");
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-    if(attempts > 30) {
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print("Hotspot tdk ada!");
-      lcd.setCursor(0,1);
-      lcd.print("Restart ESP...");
-      delay(3000);
-      ESP.restart(); // Restart jika gagal konek setelah 15 detik
-    }
-  }
+  BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  Serial.println("\nConnected to the WiFi network");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
+  BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
+      CHARACTERISTIC_UUID_RX,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
+  );
+  pRxCharacteristic->setCallbacks(new MyCallbacks());
 
-  // Tampilkan IP di LCD agar pengguna bisa mengetiknya di aplikasi
+  // Memulai service
+  pService->start();
+
+  // Memulai advertising
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);  // Bantu koneksi ke iPhone
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+
+  Serial.println("BLE Advertising Started!");
+  
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("WiFi Connected!");
+  lcd.print("Menunggu Koneksi");
   lcd.setCursor(0, 1);
-  lcd.print("IP: ");
-  lcd.print(WiFi.localIP().toString());
-
-  // Endpoint untuk menerima perintah navigasi
-  server.on("/update", HTTP_POST, []() {
-    if (server.hasArg("plain") == false) {
-      server.send(400, "text/plain", "Body not received");
-      return;
-    }
-    String message = server.arg("plain");
-    Serial.print("Received Data: ");
-    Serial.println(message);
-    
-    if (message == "PING") {
-      server.send(200, "text/plain", "OK");
-      return;
-    }
-
-    updateLCD(message);
-    server.send(200, "text/plain", "Success");
-  });
-
-  server.begin();
+  lcd.print("BLE...");
 }
 
 void loop() {
-  server.handleClient();
-  
-  // Jika koneksi WiFi terputus
-  if(WiFi.status() != WL_CONNECTED) {
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print("Koneksi Putus!");
-    lcd.setCursor(0,1);
-    lcd.print("Menghubungkan...");
-    WiFi.disconnect();
-    WiFi.reconnect();
-    delay(3000);
-    
-    if(WiFi.status() == WL_CONNECTED) {
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Tersambung Lagi!");
-      lcd.setCursor(0, 1);
-      lcd.print("IP:");
-      lcd.print(WiFi.localIP().toString());
-    }
-  }
+  // Semua dihandle event-driven via BLE callbacks
+  delay(100);
 }
 
-// Format payload: "DIRECTION|DISTANCE" (contoh: "KIRI|200m")
+// Format payload: "ARAH|JARAK" (contoh: "KIRI|200m")
 void updateLCD(String payload) {
   int separatorIndex = payload.indexOf('|');
   if (separatorIndex == -1) {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print(payload); // Print the raw string if no separator
+    lcd.print(payload); // Print raw string if no separator
     return;
   }
 
@@ -116,10 +171,41 @@ void updateLCD(String payload) {
   String distance = payload.substring(separatorIndex + 1);
 
   lcd.clear();
+  
+  // Baris 1: Ikon Panah & Arah Teks
   lcd.setCursor(0, 0);
-  lcd.print("Arah: ");
-  lcd.print(direction);
+  
+  // Mencetak ikon custom berdasarkan teks arah
+  if (direction == "KIRI") {
+    lcd.write(0); // arrowLeft
+  } else if (direction == "KANAN") {
+    lcd.write(1); // arrowRight
+  } else if (direction == "LURUS") {
+    lcd.write(2); // arrowStraight
+  } else if (direction == "BALIK") {
+    lcd.write(3); // arrowUTurn
+  } else if (direction == "BELOK") {
+    // Jika tidak spesifik, berikan tanda tanya atau lurus (sesuai selera)
+    lcd.write(2); 
+  } else {
+    // Jika arah tidak valid / kosong
+    lcd.print("-"); 
+  }
 
+  lcd.setCursor(2, 0);
+  if (direction.length() > 0 && direction != " ") {
+    // Format huruf awal kapital agar bagus
+    String dirText = direction;
+    if (dirText == "BALIK") dirText = "Putar Balik";
+    else if (dirText == "KIRI") dirText = "Belok Kiri";
+    else if (dirText == "KANAN") dirText = "Belok Kanan";
+    else if (dirText == "LURUS") dirText = "Terus Lurus";
+    lcd.print(dirText);
+  } else {
+    lcd.print("Ikuti Jalan");
+  }
+
+  // Baris 2: Jarak
   lcd.setCursor(0, 1);
   lcd.print("Jarak: ");
   lcd.print(distance);

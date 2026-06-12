@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StyleSheet, Platform, Alert, View, Text, TouchableOpacity } from 'react-native';
+import { SafeAreaView, StyleSheet, Platform, Alert, View, Text, TouchableOpacity, PermissionsAndroid } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import NotificationService from './src/services/NotificationService';
 
@@ -13,6 +13,19 @@ const App = () => {
   const requestPermissions = async () => {
     try {
       if (Platform.OS === 'android') {
+        // Minta Izin Bluetooth & Lokasi (wajib untuk BLE Scan)
+        if (Platform.Version >= 31) {
+          await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          ]);
+        } else {
+          await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+          );
+        }
+
         setPermissionsGranted(true);
 
         // Cek izin Notification Listener
@@ -36,7 +49,7 @@ const App = () => {
       }
     } catch (err) {
       console.warn('Permission request error:', err);
-      // Tetap izinkan masuk meskipun terjadi error
+      // Tetap izinkan masuk meskipun terjadi error agar UI tampil
       setPermissionsGranted(true);
     }
   };
