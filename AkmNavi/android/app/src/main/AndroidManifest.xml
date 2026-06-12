@@ -8,9 +8,6 @@
     <!-- Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
-    <!-- Foreground service untuk menjaga listener tetap aktif -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
       android:name=".MainApplication"
@@ -31,19 +28,10 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
-      
-      <!-- Notification Listener Service (package harus sesuai library) -->
-      <service android:name="com.lesimoes.androidnotificationlistener.RNAndroidNotificationListenerHeadlessJsTaskService"
-               android:exported="false" />
 
-      <service android:name="com.lesimoes.androidnotificationlistener.RNNotificationListenerService"
-               android:label="AkmNavi Notification Listener"
-               android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-               android:exported="true">
-        <intent-filter>
-            <action android:name="android.service.notification.NotificationListenerService" />
-        </intent-filter>
-      </service>
+      <!-- JANGAN deklarasikan NotificationListenerService di sini! -->
+      <!-- Library react-native-android-notification-listener sudah mendaftarkannya -->
+      <!-- di manifest miliknya sendiri. Duplikasi menyebabkan crash. -->
 
     </application>
 </manifest>
