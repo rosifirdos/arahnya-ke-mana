@@ -1,0 +1,14 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Android
+AkmNavi/android/.gradle/
+AkmNavi/android/app/build/
+AkmNavi/android/local.properties
+AkmNavi/node_modules/
+
+# OS/System
+.DS_Store
+Thumbs.db
