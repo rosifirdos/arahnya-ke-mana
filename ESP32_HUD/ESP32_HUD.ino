@@ -14,6 +14,9 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 BLEServer *pServer = NULL;
 bool deviceConnected = false;
+bool oldDeviceConnected = false;
+unsigned long connectedMsgTime = 0;
+bool showConnectedMsg = false;
 
 // Custom Characters (Panah)
 byte arrowLeft[8] = {
@@ -65,24 +68,12 @@ class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
       Serial.println("Device connected!");
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Terhubung ke HP");
-      delay(2000);
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Siaga Navigasi");
+      // Jangan gunakan delay() di dalam callback BLE!
     };
 
     void onDisconnect(BLEServer* pServer) {
       deviceConnected = false;
       Serial.println("Device disconnected!");
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Koneksi Terputus");
-      lcd.setCursor(0, 1);
-      lcd.print("Menunggu BLE...");
-      pServer->startAdvertising(); // Mulai advertising lagi
     }
 };
 
@@ -153,8 +144,42 @@ void setup() {
 }
 
 void loop() {
-  // Semua dihandle event-driven via BLE callbacks
-  delay(100);
+  // Handle state saat baru saja terhubung
+  if (deviceConnected && !oldDeviceConnected) {
+    oldDeviceConnected = true;
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Terhubung ke HP");
+    
+    connectedMsgTime = millis();
+    showConnectedMsg = true;
+  }
+
+  // Handle pergantian pesan setelah 2 detik tanpa memblokir BLE
+  if (deviceConnected && showConnectedMsg && (millis() - connectedMsgTime >= 2000)) {
+    showConnectedMsg = false;
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Siaga Navigasi");
+  }
+
+  // Handle state saat terputus
+  if (!deviceConnected && oldDeviceConnected) {
+    oldDeviceConnected = false;
+    showConnectedMsg = false;
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Koneksi Terputus");
+    lcd.setCursor(0, 1);
+    lcd.print("Menunggu BLE...");
+    
+    delay(500); // delay singkat aman sebelum advertising lagi
+    pServer->startAdvertising(); 
+    Serial.println("BLE Advertising Started again!");
+  }
+
+  delay(50);
 }
 
 // Format payload: "ARAH|JARAK" (contoh: "KIRI|200m")

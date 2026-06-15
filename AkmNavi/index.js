@@ -33,11 +33,18 @@ try {
         
         // Simpan log terakhir ke AsyncStorage agar bisa dilihat di layar UI
         try {
-          const { AsyncStorage } = require('react-native');
-          // react-native-async-storage is what we use, so require it properly
-          const AsyncStorageModule = require('@react-native-async-storage/async-storage').default;
-          await AsyncStorageModule.setItem('@last_notif', JSON.stringify(notifObj));
-        } catch (e) {}
+          const AsyncStorageModule = require('@react-native-async-storage/async-storage');
+          const AsyncStorage = AsyncStorageModule.default || AsyncStorageModule;
+          
+          // Selalu simpan semua notifikasi ke debug (meskipun bukan maps) untuk ngecek apakah service hidup
+          await AsyncStorage.setItem('@last_notif_debug', JSON.stringify(notifObj));
+          
+          if (app === 'com.google.android.apps.maps') {
+            await AsyncStorage.setItem('@last_notif', JSON.stringify(notifObj));
+          }
+        } catch (e) {
+          console.error('Gagal menyimpan AsyncStorage di Headless JS:', e);
+        }
 
         const { ToastAndroid } = require('react-native');
         ToastAndroid.show(`MAPS: ${fullContent}`, ToastAndroid.LONG);
