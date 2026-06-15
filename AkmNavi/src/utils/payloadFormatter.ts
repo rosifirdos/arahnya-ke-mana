@@ -5,46 +5,46 @@
  */
 
 export const formatPayload = (title: string, text: string, subText: string, titleBig: string): string | null => {
-  const content = `${title} ${text} ${subText} ${titleBig}`.toLowerCase();
+  // Hanya gunakan title, text, dan titleBig untuk instruksi manuver.
+  // KITA ABAIKAN subText karena biasanya berisi "6 min · 2.2 km · 20:25 ETA" (Total trip, bukan jarak belok)
+  const instructionContent = `${title} ${text} ${titleBig}`.toLowerCase();
   
-  if (!content.trim()) return null;
+  if (!instructionContent.trim()) return null;
 
   let direction = '';
   
   // Deteksi arah
-  if (content.includes('putar balik') || content.includes('u-turn')) {
+  if (instructionContent.includes('putar') || instructionContent.includes('balik') || instructionContent.includes('u-turn')) {
     direction = 'BALIK';
-  } else if (content.includes('kiri') || content.includes('left')) {
+  } else if (instructionContent.includes('kiri') || instructionContent.includes('left')) {
     direction = 'KIRI';
-  } else if (content.includes('kanan') || content.includes('right')) {
+  } else if (instructionContent.includes('kanan') || instructionContent.includes('right')) {
     direction = 'KANAN';
-  } else if (content.includes('terus') || content.includes('lurus') || content.includes('straight')) {
+  } else if (instructionContent.includes('terus') || instructionContent.includes('lurus') || instructionContent.includes('straight')) {
     direction = 'LURUS';
-  } else if (content.includes('belok')) {
-    // Jika ada kata belok tapi tidak jelas kiri/kanan
-    direction = 'BELOK';
+  } else if (instructionContent.includes('belok') || instructionContent.includes('arah')) {
+    // Jika ada kata belok/arah tapi tidak spesifik
+    direction = 'LURUS'; 
   } else {
-    // Default: asumsikan lurus/ikuti jalan jika arah kosong
-    direction = 'LURUS_DEFAULT';
+    // Default jika tidak ada instruksi arah yang jelas
+    direction = 'LURUS';
   }
 
-  // Ekstrak jarak
-  // Gunakan \b (word boundary) agar "min" tidak terbaca sebagai "m"
-  const distanceMatch = content.match(/(\d+[.,]?\d*)\s*\b(km|m|ft|mi)\b/);
+  // Ekstrak jarak dari instruksi
+  // Tambahkan dukungan untuk koma (misal 2,2 km)
+  const distanceMatch = instructionContent.match(/(\d+[.,]?\d*)\s*\b(km|m|ft|mi|meter|kilometer)\b/i);
   let distance = '-';
   
   if (distanceMatch) {
     distance = `${distanceMatch[1]}${distanceMatch[2]}`;
+  } else {
+    // Jika Google Maps tidak menyebutkan jarak (misal karena sudah di titik belok "Belok Kiri Sekarang")
+    distance = '0m';
   }
 
-  // Jika tidak ada jarak dan arah tidak jelas, jangan kirim update kosong
-  if (direction === 'LURUS_DEFAULT' && distance === '-') {
+  // Jika jarak 0m dan tidak ada kata-kata khusus, anggap tidak valid agar tidak overwrite layar secara acak
+  if (direction === 'LURUS' && distance === '0m' && !instructionContent.match(/\d/)) {
     return null;
-  }
-
-  // Ubah kembali menjadi LURUS agar LCD memunculkan panah lurus
-  if (direction === 'LURUS_DEFAULT') {
-    direction = 'LURUS';
   }
 
   return `${direction}|${distance}`;
