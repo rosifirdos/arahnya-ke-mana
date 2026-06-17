@@ -1,29 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import BleService from '../services/BleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { formatPayload } from '../utils/payloadFormatter';
-
-const ICON_MAP_KEY = '@icon_direction_map';
 
 const HomeScreen: React.FC = () => {
   const [isConnected, setIsConnected] = useState(BleService.isDeviceConnected());
   const [statusMessage, setStatusMessage] = useState('Siap memindai...');
   const [debugLog, setDebugLog] = useState('');
   const [payloadLog, setPayloadLog] = useState('Menunggu data...');
-  const [currentIconHash, setCurrentIconHash] = useState('');
-  const [isIconUnknown, setIsIconUnknown] = useState(false);
-  const [mappingCount, setMappingCount] = useState(0);
   const [hasArrived, setHasArrived] = useState(false);
-
-  const loadMappings = useCallback(async (): Promise<Record<string, string>> => {
-    try {
-      const raw = await AsyncStorage.getItem(ICON_MAP_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  }, []);
+  const [currentDirection, setCurrentDirection] = useState('');
 
   useEffect(() => {
     let lastProcessedLog = '';
@@ -37,9 +24,6 @@ const HomeScreen: React.FC = () => {
         setStatusMessage('Koneksi terputus');
       }
     };
-
-    // Load jumlah mapping awal
-    loadMappings().then(m => setMappingCount(Object.keys(m).length));
 
     const interval = setInterval(async () => {
       try {
@@ -57,22 +41,13 @@ const HomeScreen: React.FC = () => {
           const text = notifObj.text || '';
           const subText = notifObj.subText || '';
           const titleBig = notifObj.titleBig || '';
-          const iconHash = notifObj.iconHash || '';
+          const iconDirection = notifObj.iconDirection || null;
           const isArrived = notifObj.isArrived || false;
 
-          setCurrentIconHash(iconHash);
           setHasArrived(isArrived);
+          setCurrentDirection(iconDirection || 'LURUS');
 
-          // Cari arah dari pemetaan ikon
-          let iconDirection: string | null = null;
-          if (iconHash) {
-            const mappings = await loadMappings();
-            iconDirection = mappings[iconHash] || null;
-            setIsIconUnknown(!iconDirection);
-            // Update jumlah mapping
-            setMappingCount(Object.keys(mappings).length);
-          }
-
+          // iconDirection sudah ditentukan oleh native module di headless task
           const payload = formatPayload(title, text, subText, titleBig, iconDirection, isArrived);
 
           if (payload) {
@@ -104,58 +79,6 @@ const HomeScreen: React.FC = () => {
       });
     }
   }, [isConnected]);
-
-  // Handler kalibrasi: user menekan tombol arah untuk memetakan ikon saat ini
-  const handleCalibrate = useCallback(async (direction: string) => {
-    if (!currentIconHash) return;
-
-    try {
-      const mappings = await loadMappings();
-      mappings[currentIconHash] = direction;
-      await AsyncStorage.setItem(ICON_MAP_KEY, JSON.stringify(mappings));
-      setIsIconUnknown(false);
-      setMappingCount(Object.keys(mappings).length);
-
-      // Langsung kirim payload yang sudah dikoreksi ke ESP32
-      const log = await AsyncStorage.getItem('@last_notif');
-      if (log && BleService.isDeviceConnected()) {
-        const notifObj = JSON.parse(log);
-        const payload = formatPayload(
-          notifObj.title || '',
-          notifObj.text || '',
-          notifObj.subText || '',
-          notifObj.titleBig || '',
-          direction
-        );
-        if (payload) {
-          const res = await BleService.sendCurrentPayload(payload);
-          setPayloadLog(res);
-        }
-      }
-    } catch (e: any) {
-      console.warn('Failed to save calibration:', e);
-    }
-  }, [currentIconHash, loadMappings]);
-
-  // Reset semua kalibrasi
-  const handleClearMappings = useCallback(() => {
-    Alert.alert(
-      'Reset Kalibrasi',
-      'Hapus semua pemetaan ikon? Anda perlu mengkalibrasi ulang saat navigasi berikutnya.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.removeItem(ICON_MAP_KEY);
-            setMappingCount(0);
-            setIsIconUnknown(true);
-          },
-        },
-      ]
-    );
-  }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -202,87 +125,34 @@ const HomeScreen: React.FC = () => {
         </View>
       )}
 
-      {/* === KALIBRASI IKON NAVIGASI === */}
-      {isConnected && currentIconHash ? (
-        <View style={styles.calibrationBox}>
-          <Text style={styles.calibrationTitle}>🎯 Kalibrasi Arah Navigasi</Text>
-          <Text style={styles.calibrationHash}>Ikon: #{currentIconHash}</Text>
-          <Text style={[
-            styles.calibrationStatus,
-            { color: isIconUnknown ? '#FF9800' : '#4CAF50' },
-          ]}>
-            {isIconUnknown ? '❓ Ikon belum dikenal — pilih arah di bawah' : '✅ Ikon sudah dipetakan'}
+      {/* === STATUS NAVIGASI AKTIF === */}
+      {isConnected && currentDirection && !hasArrived && (
+        <View style={styles.navStatusBox}>
+          <Text style={styles.navStatusTitle}>🧭 Navigasi Aktif</Text>
+          <Text style={styles.navStatusDirection}>
+            Arah Terdeteksi: <Text style={styles.navStatusValue}>{currentDirection}</Text>
           </Text>
-
-          {isIconUnknown && (
-            <>
-              <Text style={styles.calibrationPrompt}>
-                Lihat panah di notifikasi Maps, lalu tekan arah yang benar:
-              </Text>
-              <View style={styles.calibrationButtons}>
-                <TouchableOpacity
-                  style={[styles.calBtn, { backgroundColor: '#2196F3' }]}
-                  onPress={() => handleCalibrate('KIRI')}
-                >
-                  <Text style={styles.calBtnIcon}>←</Text>
-                  <Text style={styles.calBtnLabel}>Kiri</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.calBtn, { backgroundColor: '#4CAF50' }]}
-                  onPress={() => handleCalibrate('LURUS')}
-                >
-                  <Text style={styles.calBtnIcon}>↑</Text>
-                  <Text style={styles.calBtnLabel}>Lurus</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.calBtn, { backgroundColor: '#FF9800' }]}
-                  onPress={() => handleCalibrate('KANAN')}
-                >
-                  <Text style={styles.calBtnIcon}>→</Text>
-                  <Text style={styles.calBtnLabel}>Kanan</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.calBtn, { backgroundColor: '#F44336' }]}
-                  onPress={() => handleCalibrate('BALIK')}
-                >
-                  <Text style={styles.calBtnIcon}>↺</Text>
-                  <Text style={styles.calBtnLabel}>Balik</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-
-          <View style={styles.mappingInfo}>
-            <Text style={styles.mappingCount}>
-              {mappingCount} ikon sudah dipetakan
-            </Text>
-            {mappingCount > 0 && (
-              <TouchableOpacity onPress={handleClearMappings}>
-                <Text style={styles.resetLink}>Reset Kalibrasi</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={styles.navStatusInfo}>
+            Arah dianalisis otomatis dari ikon Google Maps
+          </Text>
         </View>
-      ) : null}
+      )}
 
       <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>Info Navigasi:</Text>
+        <Text style={styles.infoTitle}>Cara Menggunakan:</Text>
         <Text style={styles.infoDesc}>
-          1. Mulai Rute Navigasi di Google Maps.{'\n'}
-          2. Saat ikon baru muncul (belum dikenal), pilih arah yang benar di panel Kalibrasi.{'\n'}
-          3. Setelah semua ikon dikalibrasi (biasanya 4-6 ikon), arah otomatis terdeteksi.{'\n'}
-          4. Kalibrasi disimpan permanen — tidak perlu diulang kecuali Google Maps update.
+          1. Hubungkan ke ESP32 dengan tombol "Scan & Connect".{'\n'}
+          2. Buka Google Maps dan mulai navigasi ke tujuan Anda.{'\n'}
+          3. Arah navigasi akan otomatis terdeteksi dan ditampilkan di LCD ESP32.{'\n'}
+          4. Tidak perlu kalibrasi — semua berjalan otomatis!
         </Text>
       </View>
 
       <View style={styles.debugBox}>
         <Text style={styles.debugTitle}>BLE TX Status:</Text>
         <Text style={styles.debugDesc}>{payloadLog}</Text>
-        <Text style={styles.debugTitle}>Icon Hash:</Text>
-        <Text style={styles.debugDesc}>{currentIconHash || '-'}</Text>
+        <Text style={styles.debugTitle}>Detected Direction:</Text>
+        <Text style={styles.debugDesc}>{currentDirection || '-'}</Text>
         <Text style={styles.debugTitle}>Debug Log (Last Notification):</Text>
         <Text style={styles.debugDesc}>{debugLog}</Text>
       </View>
@@ -402,75 +272,35 @@ const styles = StyleSheet.create({
     color: '#388E3C',
     textAlign: 'center',
   },
-  // === KALIBRASI STYLES ===
-  calibrationBox: {
+  // === NAV STATUS STYLES ===
+  navStatusBox: {
     marginTop: 20,
     padding: 15,
-    backgroundColor: '#FFF8E1',
+    backgroundColor: '#E3F2FD',
     borderRadius: 8,
     width: '100%',
     borderLeftWidth: 4,
-    borderLeftColor: '#FFC107',
+    borderLeftColor: '#2196F3',
   },
-  calibrationTitle: {
+  navStatusTitle: {
     fontWeight: 'bold',
     fontSize: 16,
     marginBottom: 8,
-    color: '#F57F17',
+    color: '#1565C0',
   },
-  calibrationHash: {
-    fontSize: 12,
-    color: '#795548',
-    fontFamily: 'monospace',
+  navStatusDirection: {
+    fontSize: 14,
+    color: '#333',
     marginBottom: 4,
   },
-  calibrationStatus: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  calibrationPrompt: {
-    fontSize: 13,
-    color: '#555',
-    marginBottom: 10,
-  },
-  calibrationButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  calBtn: {
-    flex: 1,
-    marginHorizontal: 3,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calBtnIcon: {
-    fontSize: 22,
-    color: '#fff',
+  navStatusValue: {
     fontWeight: 'bold',
+    color: '#1565C0',
   },
-  calBtnLabel: {
-    fontSize: 11,
-    color: '#fff',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  mappingInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  mappingCount: {
+  navStatusInfo: {
     fontSize: 12,
     color: '#888',
-  },
-  resetLink: {
-    fontSize: 12,
-    color: '#F44336',
-    textDecorationLine: 'underline',
+    fontStyle: 'italic',
   },
   // === INFO & DEBUG ===
   infoBox: {
