@@ -4,6 +4,7 @@ import BleService from '../services/BleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { formatPayload } from '../utils/payloadFormatter';
 import { saveIconMapping, getDirectionFromIcon, getMappingCount, clearMappings } from '../utils/iconMapper';
+import NotificationService from '../services/NotificationService';
 
 const HomeScreen: React.FC = () => {
   const [isConnected, setIsConnected] = useState(BleService.isDeviceConnected());
@@ -139,6 +140,11 @@ const HomeScreen: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleTroubleshoot = () => {
+    NotificationService.requestPermission();
+    alert('Matikan lalu NYALAKAN KEMBALI izin untuk "AkmNavi" agar layanan berjalan normal lagi.');
   };
 
   return (
@@ -286,7 +292,14 @@ const HomeScreen: React.FC = () => {
           3. Aplikasi otomatis mendeteksi arah. Jika arah yang terdeteksi SALAH, Anda bisa melakukan "Kalibrasi" dengan menekan arah yang benar di layar.{'\n'}
           4. Setelah dikalibrasi, data akan disimpan permanen untuk ikon tersebut.
         </Text>
+        <Text style={[styles.infoDesc, { color: '#D32F2F', marginTop: 10, fontWeight: 'bold' }]}>
+          ⚠️ PENTING: Jangan tutup paksa (Swipe Up dari Recent Apps) aplikasi ini selama navigasi, biarkan berjalan di background.
+        </Text>
       </View>
+
+      <TouchableOpacity style={styles.troubleButton} onPress={handleTroubleshoot}>
+        <Text style={styles.troubleButtonText}>🔧 Navigasi Macet? (Perbaiki Layanan)</Text>
+      </TouchableOpacity>
 
       <View style={styles.debugBox}>
         <Text style={styles.debugTitle}>BLE TX Status:</Text>
@@ -542,6 +555,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 22,
+  },
+  troubleButton: {
+    marginTop: 15,
+    backgroundColor: '#FF5722',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  troubleButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   debugBox: {
     marginTop: 20,
