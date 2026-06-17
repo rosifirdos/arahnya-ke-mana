@@ -14,6 +14,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ICON_MAP_KEY = '@icon_direction_map';
 
+const DEFAULT_MAPPINGS: Record<string, string> = {
+  "c8c3044a": "KANAN",
+  "c200aa30": "KIRI",
+  "43252f1d": "SAMPAI"
+};
+
 /**
  * Menghitung hash sederhana (djb2) dari string base64 ikon.
  * Hash ini menjadi fingerprint unik untuk setiap jenis ikon panah.
@@ -40,9 +46,10 @@ export function computeIconHash(iconBase64: string): string {
 export async function loadIconMappings(): Promise<Record<string, string>> {
   try {
     const raw = await AsyncStorage.getItem(ICON_MAP_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const userMappings = raw ? JSON.parse(raw) : {};
+    return { ...DEFAULT_MAPPINGS, ...userMappings };
   } catch {
-    return {};
+    return { ...DEFAULT_MAPPINGS };
   }
 }
 

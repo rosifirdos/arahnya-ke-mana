@@ -214,27 +214,27 @@ void updateLCD(String payload) {
   
   // Jika sudah sampai di tujuan, tampilkan pesan khusus
   if (direction == "SAMPAI") {
-    lcd.write(4); // checkMark
+    lcd.write(byte(4)); // checkMark
     lcd.setCursor(2, 0);
     lcd.print("Anda Telah");
     lcd.setCursor(0, 1);
     lcd.print("Sampai! ");
-    lcd.write(4);
+    lcd.write(byte(4));
     return;
   }
 
   // Mencetak ikon custom berdasarkan teks arah
   if (direction == "KIRI") {
-    lcd.write(0); // arrowLeft
+    lcd.write(byte(0)); // arrowLeft
   } else if (direction == "KANAN") {
-    lcd.write(1); // arrowRight
+    lcd.write(byte(1)); // arrowRight
   } else if (direction == "LURUS") {
-    lcd.write(2); // arrowStraight
+    lcd.write(byte(2)); // arrowStraight
   } else if (direction == "BALIK") {
-    lcd.write(3); // arrowUTurn
+    lcd.write(byte(3)); // arrowUTurn
   } else if (direction == "BELOK") {
     // Jika tidak spesifik, berikan tanda tanya atau lurus (sesuai selera)
-    lcd.write(2); 
+    lcd.write(byte(2)); 
   } else {
     // Jika arah tidak valid / kosong
     lcd.print("-"); 
