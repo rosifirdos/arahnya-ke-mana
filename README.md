@@ -57,11 +57,15 @@ Berikut adalah skema komponen fisik yang digunakan untuk merakit penerima visual
 | **Kabel Jumper** | Kabel Female-to-Male. | Penghubung daya (5V/GND) dan jalur data (I2C) dari ESP32 ke LCD. |
 
 ### Diagram Wiring (Pinout)
+
 Koneksi antara **ESP32 DevKit V1** dan **LCD 1602 (I2C)**:
-* **VCC** (LCD I2C) ➡️ **VIN** / **5V** (ESP32)
-* **GND** (LCD I2C) ➡️ **GND** (ESP32)
-* **SDA** (LCD I2C) ➡️ **GPIO 21** / **SDA** (ESP32)
-* **SCL** (LCD I2C) ➡️ **GPIO 22** / **SCL** (ESP32)
+
+| ESP32 DevKit V1 | Jalur Koneksi | LCD 1602 (I2C) | Fungsi |
+| :---: | :---: | :---: | :--- |
+| **VIN** / **5V** | ➡️ | **VCC** | Suplai Daya 5V |
+| **GND** | ➡️ | **GND** | Ground |
+| **GPIO 21** | ↔️ | **SDA** | Data I2C (Serial Data) |
+| **GPIO 22** | ➡️ | **SCL** | Clock I2C (Serial Clock) |
 
 ---
 
