@@ -57,8 +57,13 @@ try {
           // Debug: simpan notifikasi lengkap (termasuk iconLarge)
           await AsyncStorage.setItem('@last_notif_debug', JSON.stringify(notifObj));
 
+          // Deteksi apakah sudah sampai di tujuan
+          const allText = `${title} ${text} ${subText} ${titleBig}`.toLowerCase();
+          const arrivalKeywords = ['tiba', 'arrived', 'destination', 'sampai', 'telah tiba', 'you have arrived', 'anda telah', 'mencapai tujuan'];
+          const isArrived = arrivalKeywords.some(kw => allText.includes(kw));
+
           // Simpan versi ringkas DENGAN iconHash (tanpa iconLarge yang besar)
-          const leanNotif = { title, text, subText, titleBig, app, iconHash };
+          const leanNotif = { title, text, subText, titleBig, app, iconHash, isArrived };
           await AsyncStorage.setItem('@last_notif', JSON.stringify(leanNotif));
 
           // Auto-learn: jika teks mengandung kata arah, simpan pemetaan ikon→arah otomatis

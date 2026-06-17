@@ -63,6 +63,17 @@ byte arrowUTurn[8] = {
   B00000
 };
 
+byte checkMark[8] = {
+  B00000,
+  B00001,
+  B00010,
+  B10100,
+  B01000,
+  B00000,
+  B00000,
+  B00000
+};
+
 // Callback untuk koneksi BLE
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -106,6 +117,7 @@ void setup() {
   lcd.createChar(1, arrowRight);
   lcd.createChar(2, arrowStraight);
   lcd.createChar(3, arrowUTurn);
+  lcd.createChar(4, checkMark);
 
   lcd.setCursor(0, 0);
   lcd.print("Menyiapkan BLE..");
@@ -200,6 +212,17 @@ void updateLCD(String payload) {
   // Baris 1: Ikon Panah & Arah Teks
   lcd.setCursor(0, 0);
   
+  // Jika sudah sampai di tujuan, tampilkan pesan khusus
+  if (direction == "SAMPAI") {
+    lcd.write(4); // checkMark
+    lcd.setCursor(2, 0);
+    lcd.print("Anda Telah");
+    lcd.setCursor(0, 1);
+    lcd.print("Sampai! ");
+    lcd.write(4);
+    return;
+  }
+
   // Mencetak ikon custom berdasarkan teks arah
   if (direction == "KIRI") {
     lcd.write(0); // arrowLeft

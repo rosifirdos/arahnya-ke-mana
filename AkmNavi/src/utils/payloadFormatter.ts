@@ -13,8 +13,14 @@ export const formatPayload = (
   text: string,
   subText: string,
   titleBig: string,
-  iconDirection?: string | null
+  iconDirection?: string | null,
+  isArrived?: boolean
 ): string | null => {
+  // Jika sudah sampai di tujuan, kirim payload khusus
+  if (isArrived) {
+    return 'SAMPAI|0m';
+  }
+
   // Gabungkan semua teks untuk pencarian kata kunci
   const instructionContent = `${title} ${text} ${titleBig}`.toLowerCase();
 

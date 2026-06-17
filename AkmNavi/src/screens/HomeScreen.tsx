@@ -14,6 +14,7 @@ const HomeScreen: React.FC = () => {
   const [currentIconHash, setCurrentIconHash] = useState('');
   const [isIconUnknown, setIsIconUnknown] = useState(false);
   const [mappingCount, setMappingCount] = useState(0);
+  const [hasArrived, setHasArrived] = useState(false);
 
   const loadMappings = useCallback(async (): Promise<Record<string, string>> => {
     try {
@@ -57,8 +58,10 @@ const HomeScreen: React.FC = () => {
           const subText = notifObj.subText || '';
           const titleBig = notifObj.titleBig || '';
           const iconHash = notifObj.iconHash || '';
+          const isArrived = notifObj.isArrived || false;
 
           setCurrentIconHash(iconHash);
+          setHasArrived(isArrived);
 
           // Cari arah dari pemetaan ikon
           let iconDirection: string | null = null;
@@ -70,7 +73,7 @@ const HomeScreen: React.FC = () => {
             setMappingCount(Object.keys(mappings).length);
           }
 
-          const payload = formatPayload(title, text, subText, titleBig, iconDirection);
+          const payload = formatPayload(title, text, subText, titleBig, iconDirection, isArrived);
 
           if (payload) {
             BleService.sendCurrentPayload(payload).then(res => {
@@ -189,6 +192,15 @@ const HomeScreen: React.FC = () => {
       >
         <Text style={styles.buttonText}>{isConnected ? 'Putus Koneksi' : 'Scan & Connect'}</Text>
       </TouchableOpacity>
+
+      {/* === PEMBERITAHUAN SAMPAI DI TUJUAN === */}
+      {hasArrived && (
+        <View style={styles.arrivedBox}>
+          <Text style={styles.arrivedIcon}>🏁</Text>
+          <Text style={styles.arrivedTitle}>Anda Telah Sampai!</Text>
+          <Text style={styles.arrivedDesc}>Anda telah tiba di lokasi tujuan. Selamat!</Text>
+        </View>
+      )}
 
       {/* === KALIBRASI IKON NAVIGASI === */}
       {isConnected && currentIconHash ? (
@@ -363,6 +375,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // === ARRIVED STYLES ===
+  arrivedBox: {
+    marginTop: 20,
+    padding: 20,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    width: '100%',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+    alignItems: 'center',
+  },
+  arrivedIcon: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  arrivedTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 6,
+  },
+  arrivedDesc: {
+    fontSize: 14,
+    color: '#388E3C',
+    textAlign: 'center',
   },
   // === KALIBRASI STYLES ===
   calibrationBox: {
