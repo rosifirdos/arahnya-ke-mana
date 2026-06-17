@@ -44,19 +44,37 @@ try {
           const arrivalKeywords = ['tiba', 'arrived', 'destination', 'sampai', 'telah tiba', 'you have arrived', 'anda telah', 'mencapai tujuan'];
           const isArrived = arrivalKeywords.some(kw => allText.includes(kw));
 
-          // Gunakan native module untuk menganalisis ikon navigasi
-          // IconAnalyzer mendekode gambar PNG dan menentukan arah dari distribusi piksel
+          // Deteksi arah navigasi
           let iconDirection = 'LURUS'; // Default
+          let iconHash = '';
+          
           try {
-            const { NativeModules } = require('react-native');
-            const { IconAnalyzer } = NativeModules;
-            if (IconAnalyzer && iconLarge && iconLarge.length > 100) {
-              iconDirection = await IconAnalyzer.analyzeDirection(iconLarge);
-              console.log(`IconAnalyzer detected: ${iconDirection}`);
+            const iconMapper = require('./src/utils/iconMapper');
+            if (iconLarge && iconLarge.length > 100) {
+              iconHash = iconMapper.computeIconHash(iconLarge);
+              
+              // 1. Cek apakah ikon ini sudah dikalibrasi (manual) oleh user
+              if (iconHash) {
+                const mappedDirection = await iconMapper.getDirectionFromIcon(iconHash);
+                if (mappedDirection) {
+                  iconDirection = mappedDirection;
+                  console.log(`Direction from Calibration Hash (${iconHash}): ${iconDirection}`);
+                }
+              }
+              
+              // 2. Jika belum dikalibrasi, gunakan Native Module sebagai Fallback
+              if (!iconDirection || (iconHash && !(await iconMapper.getDirectionFromIcon(iconHash)))) {
+                const { NativeModules } = require('react-native');
+                const { IconAnalyzer } = NativeModules;
+                if (IconAnalyzer) {
+                  iconDirection = await IconAnalyzer.analyzeDirection(iconLarge);
+                  console.log(`IconAnalyzer Fallback detected: ${iconDirection}`);
+                }
+              }
             }
-          } catch (analyzerError) {
-            console.warn('IconAnalyzer error, using text fallback:', analyzerError);
-            // Fallback: deteksi dari teks jika native module gagal
+          } catch (err) {
+            console.warn('Error detecting direction:', err);
+            // Fallback teks jika semua gagal
             const fullText = `${title} ${text} ${titleBig}`.toLowerCase();
             if (fullText.includes('putar') || fullText.includes('balik') || fullText.includes('u-turn')) {
               iconDirection = 'BALIK';
@@ -67,8 +85,8 @@ try {
             }
           }
 
-          // Simpan versi ringkas dengan hasil analisis ikon
-          const leanNotif = { title, text, subText, titleBig, app, iconDirection, isArrived };
+          // Simpan versi ringkas dengan hasil analisis ikon dan hash-nya
+          const leanNotif = { title, text, subText, titleBig, app, iconDirection, iconHash, isArrived };
           await AsyncStorage.setItem('@last_notif', JSON.stringify(leanNotif));
         } catch (e) {
           console.error('Gagal menyimpan AsyncStorage di Headless JS:', e);

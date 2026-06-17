@@ -17,7 +17,7 @@ export const formatPayload = (
   isArrived?: boolean
 ): string | null => {
   // Jika sudah sampai di tujuan, kirim payload khusus
-  if (isArrived) {
+  if (isArrived || iconDirection === 'SAMPAI') {
     return 'SAMPAI|0m';
   }
 

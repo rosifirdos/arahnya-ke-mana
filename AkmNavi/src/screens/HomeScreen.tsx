@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Share } from 'react-native';
 import BleService from '../services/BleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { formatPayload } from '../utils/payloadFormatter';
+import { saveIconMapping, getDirectionFromIcon, getMappingCount, clearMappings } from '../utils/iconMapper';
 
 const HomeScreen: React.FC = () => {
   const [isConnected, setIsConnected] = useState(BleService.isDeviceConnected());
@@ -11,6 +12,14 @@ const HomeScreen: React.FC = () => {
   const [payloadLog, setPayloadLog] = useState('Menunggu data...');
   const [hasArrived, setHasArrived] = useState(false);
   const [currentDirection, setCurrentDirection] = useState('');
+  const [currentIconHash, setCurrentIconHash] = useState('');
+  const [isIconUnknown, setIsIconUnknown] = useState(false);
+  const [mappingCount, setMappingCount] = useState(0);
+
+  // Load mapping count when app starts
+  useEffect(() => {
+    getMappingCount().then(setMappingCount);
+  }, []);
 
   useEffect(() => {
     let lastProcessedLog = '';
@@ -42,12 +51,25 @@ const HomeScreen: React.FC = () => {
           const subText = notifObj.subText || '';
           const titleBig = notifObj.titleBig || '';
           const iconDirection = notifObj.iconDirection || null;
+          const iconHash = notifObj.iconHash || '';
           const isArrived = notifObj.isArrived || false;
 
           setHasArrived(isArrived);
           setCurrentDirection(iconDirection || 'LURUS');
+          
+          if (iconHash) {
+            setCurrentIconHash(iconHash);
+            // Cek apakah ikon ini sudah ada di database mapping
+            getDirectionFromIcon(iconHash).then(mappedDir => {
+              // Jika mappedDir null, artinya ini menggunakan Fallback dari Native Module.
+              // Tampilkan UI kalibrasi agar user bisa mengoverride-nya
+              setIsIconUnknown(mappedDir === null);
+            });
+          } else {
+            setIsIconUnknown(false);
+          }
 
-          // iconDirection sudah ditentukan oleh native module di headless task
+          // iconDirection sudah ditentukan oleh native module / mapper di headless task
           const payload = formatPayload(title, text, subText, titleBig, iconDirection, isArrived);
 
           if (payload) {
@@ -79,6 +101,45 @@ const HomeScreen: React.FC = () => {
       });
     }
   }, [isConnected]);
+
+  const handleCalibrate = async (direction: string) => {
+    if (!currentIconHash) return;
+    
+    // Simpan ke AsyncStorage
+    await saveIconMapping(currentIconHash, direction);
+    
+    // Update State UI
+    setIsIconUnknown(false);
+    setCurrentDirection(direction);
+    
+    // Update jumlah mapping
+    const count = await getMappingCount();
+    setMappingCount(count);
+  };
+
+  const handleClearMappings = async () => {
+    await clearMappings();
+    setMappingCount(0);
+    if (currentIconHash) {
+      setIsIconUnknown(true);
+    }
+  };
+
+  const handleShareMappings = async () => {
+    try {
+      const raw = await AsyncStorage.getItem('@icon_direction_map');
+      if (raw) {
+        await Share.share({
+          message: raw,
+          title: 'Data Kalibrasi AKM Navi'
+        });
+      } else {
+        alert('Belum ada data kalibrasi');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -116,6 +177,85 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.buttonText}>{isConnected ? 'Putus Koneksi' : 'Scan & Connect'}</Text>
       </TouchableOpacity>
 
+      {/* === KALIBRASI IKON NAVIGASI === */}
+      {isConnected && currentIconHash ? (
+        <View style={styles.calibrationBox}>
+          <Text style={styles.calibrationTitle}>🎯 Kalibrasi Arah Navigasi</Text>
+          <Text style={styles.calibrationHash}>Ikon: #{currentIconHash}</Text>
+          <Text style={[
+            styles.calibrationStatus,
+            { color: isIconUnknown ? '#FF9800' : '#4CAF50' },
+          ]}>
+            {isIconUnknown ? '❓ Ikon menggunakan Fallback — pilih arah yang benar di bawah' : '✅ Ikon sudah dipetakan secara manual'}
+          </Text>
+
+          {isIconUnknown && (
+            <>
+              <Text style={styles.calibrationPrompt}>
+                Jika arah navigasi salah, tekan arah yang benar di bawah ini:
+              </Text>
+              <View style={styles.calibrationButtons}>
+                <TouchableOpacity
+                  style={[styles.calBtn, { backgroundColor: '#2196F3' }]}
+                  onPress={() => handleCalibrate('KIRI')}
+                >
+                  <Text style={styles.calBtnIcon}>←</Text>
+                  <Text style={styles.calBtnLabel}>Kiri</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.calBtn, { backgroundColor: '#4CAF50' }]}
+                  onPress={() => handleCalibrate('LURUS')}
+                >
+                  <Text style={styles.calBtnIcon}>↑</Text>
+                  <Text style={styles.calBtnLabel}>Lurus</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.calBtn, { backgroundColor: '#FF9800' }]}
+                  onPress={() => handleCalibrate('KANAN')}
+                >
+                  <Text style={styles.calBtnIcon}>→</Text>
+                  <Text style={styles.calBtnLabel}>Kanan</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.calBtn, { backgroundColor: '#F44336' }]}
+                  onPress={() => handleCalibrate('BALIK')}
+                >
+                  <Text style={styles.calBtnIcon}>↺</Text>
+                  <Text style={styles.calBtnLabel}>Balik</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.calBtn, { backgroundColor: '#9C27B0' }]}
+                  onPress={() => handleCalibrate('SAMPAI')}
+                >
+                  <Text style={styles.calBtnIcon}>🏁</Text>
+                  <Text style={styles.calBtnLabel}>Sampai</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          <View style={styles.mappingInfo}>
+            <Text style={styles.mappingCount}>
+              {mappingCount} ikon sudah dipetakan manual
+            </Text>
+            {mappingCount > 0 && (
+              <View style={{flexDirection: 'row', gap: 15}}>
+                <TouchableOpacity onPress={handleShareMappings}>
+                  <Text style={styles.shareLink}>Bagi/Share Data</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleClearMappings}>
+                  <Text style={styles.resetLink}>Reset Kalibrasi</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      ) : null}
+
       {/* === PEMBERITAHUAN SAMPAI DI TUJUAN === */}
       {hasArrived && (
         <View style={styles.arrivedBox}>
@@ -143,8 +283,8 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.infoDesc}>
           1. Hubungkan ke ESP32 dengan tombol "Scan & Connect".{'\n'}
           2. Buka Google Maps dan mulai navigasi ke tujuan Anda.{'\n'}
-          3. Arah navigasi akan otomatis terdeteksi dan ditampilkan di LCD ESP32.{'\n'}
-          4. Tidak perlu kalibrasi — semua berjalan otomatis!
+          3. Aplikasi otomatis mendeteksi arah. Jika arah yang terdeteksi SALAH, Anda bisa melakukan "Kalibrasi" dengan menekan arah yang benar di layar.{'\n'}
+          4. Setelah dikalibrasi, data akan disimpan permanen untuk ikon tersebut.
         </Text>
       </View>
 
@@ -153,6 +293,8 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.debugDesc}>{payloadLog}</Text>
         <Text style={styles.debugTitle}>Detected Direction:</Text>
         <Text style={styles.debugDesc}>{currentDirection || '-'}</Text>
+        <Text style={styles.debugTitle}>Icon Hash:</Text>
+        <Text style={styles.debugDesc}>{currentIconHash || '-'}</Text>
         <Text style={styles.debugTitle}>Debug Log (Last Notification):</Text>
         <Text style={styles.debugDesc}>{debugLog}</Text>
       </View>
@@ -245,6 +387,86 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // === KALIBRASI STYLES ===
+  calibrationBox: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#FFF8E1',
+    borderRadius: 8,
+    width: '100%',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFC107',
+  },
+  calibrationTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 8,
+    color: '#F57F17',
+  },
+  calibrationHash: {
+    fontSize: 12,
+    color: '#795548',
+    fontFamily: 'monospace',
+    marginBottom: 4,
+  },
+  calibrationStatus: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  calibrationPrompt: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 10,
+  },
+  calibrationButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  calBtn: {
+    width: '18%',
+    marginHorizontal: '1%',
+    marginBottom: 5,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calBtnIcon: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  calBtnLabel: {
+    fontSize: 9,
+    color: '#fff',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  mappingInfo: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  mappingCount: {
+    fontSize: 12,
+    color: '#888',
+  },
+  resetLink: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#F44336',
+    textDecorationLine: 'underline',
+  },
+  shareLink: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#2196F3',
+    textDecorationLine: 'underline',
   },
   // === ARRIVED STYLES ===
   arrivedBox: {
