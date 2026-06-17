@@ -1,79 +1,127 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# AkmNavi (Arahnya ke Mana) 🧭🏍️
 
-# Getting Started
+**AkmNavi (Arahnya ke Mana)** adalah proyek IoT (Internet of Things) yang dirancang untuk membangun sistem **Heads-Up Display (HUD) Sekunder** guna meningkatkan keamanan dan kenyamanan saat berkendara. Sistem ini terdiri dari **Aplikasi Android Pendamping** (React Native) dan **Perangkat Keras HUD** (ESP32 + LCD 1602 I2C). 
 
->**Note**: Make sure you have completed the [React Native - Environment Setup](https://reactnative.dev/docs/environment-setup) instructions till "Creating a new application" step, before proceeding.
+Aplikasi ini menyadap notifikasi petunjuk arah dari Google Maps di latar belakang, mem-parsing teks & ikon arah, lalu mengirimkan data tersebut via **Bluetooth Low Energy (BLE)** ke perangkat ESP32 untuk ditampilkan secara *real-time* dalam bentuk ikon panah kustom dan jarak tempuh. Dengan sistem ini, pengendara tidak perlu lagi sering melihat layar ponsel selama perjalanan, sehingga meminimalkan risiko kecelakaan.
 
-## Step 1: Start the Metro Server
+---
 
-First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
+## 📸 Rancangan & Alur Sistem
 
-To start Metro, run the following command from the _root_ of your React Native project:
+Berikut adalah diagram arsitektur dan alur data dari proyek **AkmNavi**:
 
-```bash
-# using npm
-npm start
+![Rancangan Sistem](./hud_system_design.png)
 
-# OR using Yarn
-yarn start
-```
+### Alur Kerja Sistem:
+1. **Google Maps** memunculkan notifikasi petunjuk jalan di HP Android (foreground/background).
+2. **AkmNavi App** (melalui Android Notification Listener Service & Headless JS) menyadap notifikasi tersebut.
+3. Aplikasi mengekstrak informasi rute: **Arah** (belok kiri, kanan, putar balik, dll.) dan **Jarak** (m, km, ft).
+4. Aplikasi menggunakan algoritma **djb2 hash** untuk mengidentifikasi ikon notifikasi Maps. Jika ikon belum terkalibrasi, aplikasi menyediakan UI kalibrasi manual untuk memetakan hash tersebut ke arah yang benar. Modul Java asli (*Native Module* `IconAnalyzer`) digunakan sebagai fallback.
+5. Data yang telah diringkas diformat menjadi payload sederhana (contoh: `"KIRI|200m"`) dan ditransmisikan via **Bluetooth Low Energy (BLE)**.
+6. Perangkat **ESP32** menerima payload tersebut, mengurai (*parse*) string, dan mencocokkannya dengan karakter panah kustom (*Custom Character* CGRAM) di **LCD 1602**.
 
-## Step 2: Start your Application
+---
 
-Let Metro Bundler run in its _own_ terminal. Open a _new_ terminal from the _root_ of your React Native project. Run the following command to start your _Android_ or _iOS_ app:
+## 🛠️ Tumpukan Teknologi (Tech Stack)
 
-### For Android
+Proyek ini dibangun menggunakan teknologi modern untuk menjamin performa tinggi dan latensi rendah:
 
-```bash
-# using npm
-npm run android
+### 1. Aplikasi Pendamping Android (Mobile App)
+* **Framework Utama:** [React Native](https://reactnative.dev/) (v0.74.1)
+* **Bahasa Pemrograman:** [TypeScript](https://www.typescriptlang.org/) (untuk tipe data yang kuat dan keandalan kode)
+* **Manajemen Bluetooth:** `react-native-ble-plx` (untuk komunikasi BLE berdaya rendah)
+* **Penyadap Notifikasi:** `react-native-android-notification-listener` (untuk mengambil notifikasi Google Maps)
+* **Penyimpanan Lokal:** `@react-native-async-storage/async-storage` (untuk menyimpan konfigurasi kalibrasi ikon)
+* **Modul Native (Java/Kotlin):** Custom `IconAnalyzer` untuk menganalisis dan mendeteksi arah ikon Maps secara lokal di sisi Android.
 
-# OR using Yarn
-yarn android
-```
+### 2. Perangkat Keras HUD (Firmware ESP32)
+* **Bahasa Pemrograman:** C++ / Arduino Framework
+* **Platform IoT:** ESP32 DevKit V1 (terintegrasi modul BLE & I2C)
+* **Library Utama:**
+  * `<BLEDevice.h>`, `<BLEServer.h>`, `<BLEUtils.h>`, `<BLE2902.h>` (Komunikasi BLE UART Service)
+  * `<LiquidCrystal_I2C.h>` (Pengendali layar LCD karakter via bus I2C)
+  * `<Wire.h>` (Protokol komunikasi I2C)
 
-### For iOS
+---
 
-```bash
-# using npm
-npm run ios
+## 🔌 Spesifikasi Perangkat Keras & Wiring
 
-# OR using Yarn
-yarn ios
-```
+Berikut adalah skema komponen fisik yang digunakan untuk merakit penerima visual HUD:
 
-If everything is set up _correctly_, you should see your new app running in your _Android Emulator_ or _iOS Simulator_ shortly provided you have set up your emulator/simulator correctly.
+### Daftar Komponen
+| Komponen | Spesifikasi / Deskripsi | Fungsi Utama |
+| :--- | :--- | :--- |
+| **ESP32 DevKit V1** | MCU 32-bit dengan BLE terintegrasi. | Pusat kendali (BLE Server), penerima payload, dan pemroses logika tampilan. |
+| **LCD 1602 + I2C** | Layar 16x2 karakter dengan chip PCF8574. | Layar HUD utama. Menampilkan teks dan *Custom Character* (ikon panah). |
+| **Breadboard 400 Pin** | Papan sirkuit tanpa solder. | Media penghubung purwarupa komponen. |
+| **Kabel Jumper** | Kabel Female-to-Male. | Penghubung daya (5V/GND) dan jalur data (I2C) dari ESP32 ke LCD. |
 
-This is one way to run your app — you can also run it directly from within Android Studio and Xcode respectively.
+### Diagram Wiring (Pinout)
+Koneksi antara **ESP32 DevKit V1** dan **LCD 1602 (I2C)**:
+* **VCC** (LCD I2C) ➡️ **VIN** / **5V** (ESP32)
+* **GND** (LCD I2C) ➡️ **GND** (ESP32)
+* **SDA** (LCD I2C) ➡️ **GPIO 21** / **SDA** (ESP32)
+* **SCL** (LCD I2C) ➡️ **GPIO 22** / **SCL** (ESP32)
 
-## Step 3: Modifying your App
+---
 
-Now that you have successfully run the app, let's modify it.
+## 📡 Protokol Data (BLE Payload Format)
 
-1. Open `App.tsx` in your text editor of choice and edit some lines.
-2. For **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Developer Menu** (<kbd>Ctrl</kbd> + <kbd>M</kbd> (on Window and Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (on macOS)) to see your changes!
+Untuk mengoptimalkan ukuran transmisi data dan mencegah *buffer overflow* pada memori ESP32, data rute diringkas menjadi satu baris string dengan pembatas (*delimiter*) karakter `|`:
 
-   For **iOS**: Hit <kbd>Cmd ⌘</kbd> + <kbd>R</kbd> in your iOS Simulator to reload the app and see your changes!
+$$\text{Format Payload} = \text{ARAH} \mid \text{JARAK}$$
 
-## Congratulations! :tada:
+### Contoh Payload & Tampilan pada LCD 1602:
 
-You've successfully run and modified your React Native App. :partying_face:
+| Payload via BLE | Arah Terdeteksi | Jarak Tempuh | Tampilan LCD 1602 |
+| :--- | :--- | :--- | :--- |
+| `KIRI\|200m` | Belok Kiri | 200 meter | ⬅️ Belok Kiri <br> Jarak: 200m |
+| `KANAN\|1.5km` | Belok Kanan | 1.5 kilometer | ➡️ Belok Kanan <br> Jarak: 1.5km |
+| `LURUS\|500m` | Terus Lurus | 500 meter | ⬆️ Terus Lurus <br> Jarak: 500m |
+| `BALIK\|100m` | Putar Balik | 100 meter | 🔄 Putar Balik <br> Jarak: 100m |
+| `SAMPAI\|0m` | Sampai | 0 meter | 🏁 Anda Telah <br> Sampai! 🏁 |
 
-### Now what?
+> **Catatan:** ESP32 secara otomatis memetakan nilai `KIRI`, `KANAN`, `LURUS`, `BALIK`, dan `SAMPAI` ke *custom bitmap* LCD di CGRAM untuk merender ikon panah yang presisi di baris pertama LCD.
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [Introduction to React Native](https://reactnative.dev/docs/getting-started).
+---
 
-# Troubleshooting
+## 🚀 Cara Memulai & Menjalankan
 
-If you can't get this to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+### A. Setup & Menjalankan Aplikasi Android
+1. **Prasyarat:** Pastikan Anda telah mengonfigurasi [React Native Environment Setup](https://reactnative.dev/docs/environment-setup) untuk pengembangan Android.
+2. **Instalasi Dependensi:**
+   Masuk ke direktori `AkmNavi` dan jalankan:
+   ```bash
+   npm install
+   ```
+3. **Jalankan Metro Bundler:**
+   ```bash
+   npm start
+   ```
+4. **Jalankan Aplikasi ke HP/Emulator:**
+   Hubungkan HP Android dengan mode debug aktif, lalu jalankan:
+   ```bash
+   npm run android
+   ```
+5. **Konfigurasi Akses Izin:**
+   * Izinkan akses **Lokasi** dan **Bluetooth** di HP Anda.
+   * Aktifkan izin **Notification Access (Notification Listener)** untuk aplikasi **AkmNavi** melalui pengaturan Android Anda agar aplikasi dapat membaca notifikasi Google Maps.
 
-# Learn More
+### B. Flash Firmware ke ESP32
+1. Buka folder `ESP32_HUD` dan buka file `ESP32_HUD.ino` menggunakan **Arduino IDE**.
+2. Instal library **LiquidCrystal_I2C** dari Library Manager.
+3. Pilih Board **ESP32 Dev Module** dan Port COM yang sesuai.
+4. Klik **Upload** untuk mem-flash kode ke ESP32.
+5. Buka Serial Monitor (baud rate `115200`) untuk melihat debug status BLE.
+6. LCD akan menampilkan `"Menunggu Koneksi BLE..."`.
 
-To learn more about React Native, take a look at the following resources:
+---
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+## 🎯 Panduan Kalibrasi Ikon Navigasi
+
+Google Maps menggunakan berbagai macam bentuk ikon panah notifikasi (berbentuk base64). Aplikasi **AkmNavi** menyediakan fitur kalibrasi instan:
+1. Hubungkan aplikasi ke perangkat ESP32 dengan menekan tombol **Scan & Connect**.
+2. Mulai navigasi rute di Google Maps.
+3. Ketika notifikasi pertama kali masuk, jika ikon rute belum terdaftar di database lokal aplikasi, status kalibrasi akan menunjukkan `Ikon menggunakan Fallback`.
+4. Anda dapat memilih tombol kalibrasi arah yang benar (`Kiri`, `Lurus`, `Kanan`, `Balik`, `Sampai`) pada layar aplikasi.
+5. Konfigurasi kalibrasi akan disimpan secara permanen di memori lokal ponsel (`AsyncStorage`), dan dapat dibagikan (*share*) atau di-*reset* kapan saja.
