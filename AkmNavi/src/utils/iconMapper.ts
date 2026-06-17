@@ -17,7 +17,9 @@ const ICON_MAP_KEY = '@icon_direction_map';
 const DEFAULT_MAPPINGS: Record<string, string> = {
   "c8c3044a": "KANAN",
   "c200aa30": "KIRI",
-  "43252f1d": "SAMPAI"
+  "43252f1d": "SAMPAI",
+  "7d85d581": "LURUS",
+  "3f9e42d0": "SAMPAI"
 };
 
 /**
